@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace UnityVolumeRendering
@@ -31,7 +32,22 @@ namespace UnityVolumeRendering
 
         private Texture3D dataTexture = null;
         private Texture3D gradientTexture = null;
-        
+
+        public static Dictionary<int, BrainSection> table;
+
+        public async void FillLookupTable()
+        {
+            table = new Dictionary<int, BrainSection>();
+            TextAsset file = Resources.Load<TextAsset>("FreeSurferValues");
+            string lookupTable = file.ToString();
+            string[] rows = lookupTable.Split('\n');
+            for(int i = 0; i < rows.Length - 1; ++i)
+            {
+                string[] elements = rows[i].Split('\t'); // each element is seperated by a tab
+                int index = Int32.Parse(elements[0]);
+                table[index] = new BrainSection(Int32.Parse(elements[2]), Int32.Parse(elements[3]), Int32.Parse(elements[4]), Int32.Parse(elements[5]), elements[1]);
+            }
+        }
         
         public Texture3D GetDataTexture()
         {
@@ -120,11 +136,13 @@ namespace UnityVolumeRendering
 
         private Texture3D CreateTextureInternal()
         {
-            TextureFormat texformat = SystemInfo.SupportsTextureFormat(TextureFormat.RHalf) ? TextureFormat.RHalf : TextureFormat.RFloat;
+            if(table == null) FillLookupTable();
+
+            TextureFormat texformat = SystemInfo.SupportsTextureFormat(TextureFormat.RHalf) ? TextureFormat.RHalf : TextureFormat.RFloat; // change to RGBAFloat or RGBAHalf
             Texture3D texture = new Texture3D(dimX, dimY, dimZ, texformat, false);
             texture.wrapMode = TextureWrapMode.Clamp;
 
-            float minValue = GetMinDataValue();
+            float minValue = GetMinDataValue(); //probably need to get rid of min and max entirely
             float maxValue = GetMaxDataValue();
             float maxRange = maxValue - minValue;
 
@@ -159,6 +177,8 @@ namespace UnityVolumeRendering
 
         private Texture3D CreateGradientTextureInternal() 
         {
+            if(table == null) FillLookupTable();
+            
             TextureFormat texformat = SystemInfo.SupportsTextureFormat(TextureFormat.RGBAHalf) ? TextureFormat.RGBAHalf : TextureFormat.RGBAFloat;
             Texture3D texture = new Texture3D(dimX, dimY, dimZ, texformat, false);
             texture.wrapMode = TextureWrapMode.Clamp;
