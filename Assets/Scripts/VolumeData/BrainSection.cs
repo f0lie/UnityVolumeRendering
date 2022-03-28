@@ -3,20 +3,22 @@ using System.Collections.Generic;
 
 public class BrainSection
 {
-    public int r { get; set; }
-    public int g { get; set; }
-    public int b { get; set; }
-    public int a { get; set; }
+    public float r { get; set; }
+    public float g { get; set; }
+    public float b { get; set; }
+    public float a { get; set; }
 
     public string label { get; set; }
+    public float intensity { get; set; }
 
     public BrainSection() {}
-    public BrainSection(int _r, int _g, int _b, int _a, string _label)
+    public BrainSection(float _r, float _g, float _b, float _a, string _label, float _intensity)
     {
         r = _r;
         g = _g;
         b = _b;
         a = _a;
         label = _label;
+        intensity = _intensity;
     }
 }

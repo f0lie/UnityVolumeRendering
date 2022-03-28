@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 using UnityEngine;
+using System.Globalization;
 
 namespace UnityVolumeRendering
 {
@@ -35,7 +36,7 @@ namespace UnityVolumeRendering
 
         public static Dictionary<int, BrainSection> table;
 
-        public async void FillLookupTable()
+        public static async void FillLookupTable()
         {
             table = new Dictionary<int, BrainSection>();
             TextAsset file = Resources.Load<TextAsset>("FreeSurferValues");
@@ -45,19 +46,27 @@ namespace UnityVolumeRendering
             {
                 string[] elements = rows[i].Split('\t'); // each element is seperated by a tab
                 int index = Int32.Parse(elements[0]);
-                table[index] = new BrainSection(Int32.Parse(elements[2]), Int32.Parse(elements[3]), Int32.Parse(elements[4]), Int32.Parse(elements[5]), elements[1]);
+                table[index] = new BrainSection(ParseFloat(elements[2]), ParseFloat(elements[3]), ParseFloat(elements[4]), 
+                    ParseFloat(elements[5]), elements[1], ParseFloat(elements[6]));
             }
+        }
+
+        public static float ParseFloat(string s)
+        {
+            return float.Parse(s, CultureInfo.InvariantCulture.NumberFormat);
         }
         
         public Texture3D GetDataTexture()
         {
-            dataTexture = CreateTextureInternal();
+            if(dataTexture == null)
+                dataTexture = CreateTextureInternal();
             return dataTexture;
         }
 
         public Texture3D GetGradientTexture()
         {
-            gradientTexture = CreateGradientTextureInternal();
+            if(gradientTexture == null)
+                gradientTexture = CreateGradientTextureInternal();
             return gradientTexture;
         }
 
@@ -138,24 +147,26 @@ namespace UnityVolumeRendering
         {
             if(table == null) FillLookupTable();
 
-            TextureFormat texformat = SystemInfo.SupportsTextureFormat(TextureFormat.RHalf) ? TextureFormat.RHalf : TextureFormat.RFloat; // change to RGBAFloat or RGBAHalf
+            TextureFormat texformat = TextureFormat.RFloat; // change to RGBAFloat or RGBAHalf
             Texture3D texture = new Texture3D(dimX, dimY, dimZ, texformat, false);
             texture.wrapMode = TextureWrapMode.Clamp;
 
-            float minValue = GetMinDataValue(); //probably need to get rid of min and max entirely
-            float maxValue = GetMaxDataValue();
-            float maxRange = maxValue - minValue;
+            //float minValue = GetMinDataValue(); //probably need to get rid of min and max entirely
+            //float maxValue = GetMaxDataValue();
+            //float maxRange = maxValue - minValue;
 
             bool isHalfFloat = texformat == TextureFormat.RHalf;
             try
             {
                 // Create a byte array for filling the texture. Store has half (16 bit) or single (32 bit) float values.
-                int sampleSize = isHalfFloat ? 2 : 4;
+                int sampleSize = 4;// isHalfFloat ? 2 : 4;
                 byte[] bytes = new byte[data.Length * sampleSize]; // This can cause OutOfMemoryException
+                //Debug.Log("In pixel func");
                 for (int iData = 0; iData < data.Length; iData++)
                 {
-                    float pixelValue = (float)(data[iData] - minValue) / maxRange;
-                    byte[] pixelBytes = isHalfFloat ? BitConverter.GetBytes(Mathf.FloatToHalf(pixelValue)) : BitConverter.GetBytes(pixelValue);
+                    int val = (int)data[iData];
+                    BrainSection pixelValue = table[val];
+                    byte[] pixelBytes = BitConverter.GetBytes(pixelValue.intensity);
 
                     Array.Copy(pixelBytes, 0, bytes, iData * sampleSize, sampleSize);
                 }
@@ -165,11 +176,11 @@ namespace UnityVolumeRendering
             
             catch (OutOfMemoryException ex)
             {
-                Debug.LogWarning("Out of memory when creating texture. Using fallback method.");
+                Debug.Log("Out of memory when creating texture. Using fallback method.");
                 for (int x = 0; x < dimX; x++)
                     for (int y = 0; y < dimY; y++)
                         for (int z = 0; z < dimZ; z++)
-                            texture.SetPixel(x, y, z, new Color((float)(data[x + y * dimX + z * (dimX * dimY)] - minValue) / maxRange, 0.0f, 0.0f, 0.0f));
+                            texture.SetPixel(x, y, z, new Color((float)(data[x + y * dimX + z * (dimX * dimY)]), 0.0f, 0.0f, 0.0f));
             }
             texture.Apply();
             return texture;
