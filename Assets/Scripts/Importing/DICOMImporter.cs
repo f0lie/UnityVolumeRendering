@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using openDicom.Image;
 using System.Linq;
 using System.Runtime.InteropServices;
+//using System.Diagnostics;
 
 namespace UnityVolumeRendering
 {
@@ -103,13 +104,13 @@ namespace UnityVolumeRendering
         {
             List<DICOMSliceFile> files = series.dicomFiles;
 
+            Debug.Log("Import Dicom");
             // Check if the series is missing the slice location tag
             bool needsCalcLoc = false;
             foreach (DICOMSliceFile file in files)
             {
                 needsCalcLoc |= file.missingLocation;
             }
-
             // Calculate slice location from "Image Position" (0020,0032)
             if (needsCalcLoc)
                 CalcSliceLocFromPos(files);
@@ -140,6 +141,7 @@ namespace UnityVolumeRendering
                 DICOMSliceFile slice = files[iSlice];
                 PixelData pixelData = slice.file.PixelData;
                 int[] pixelArr = ToPixelArray(pixelData);
+                //Debug.Log(pixelArr);
                 if (pixelArr == null) // This should not happen
                     pixelArr = new int[pixelData.Rows * pixelData.Columns];
 
@@ -150,10 +152,7 @@ namespace UnityVolumeRendering
                         int pixelIndex = (iRow * pixelData.Columns) + iCol;
                         int dataIndex = (iSlice * pixelData.Columns * pixelData.Rows) + (iRow * pixelData.Columns) + iCol;
 
-                        int pixelValue = pixelArr[pixelIndex];
-                        float hounsfieldValue = pixelValue * slice.slope + slice.intercept;
-
-                        dataset.data[dataIndex] = Mathf.Clamp(hounsfieldValue, -1024.0f, 3071.0f);
+                        dataset.data[dataIndex] = pixelArr[pixelIndex];
                     }
                 }
             }
@@ -313,6 +312,7 @@ namespace UnityVolumeRendering
                                 Debug.LogError("Invalid format!");
 
                             intArray[pixelIndex] = cellValue;
+                            //if(cellValue != 0) Debug.Log("Cellvalue: " + cellValue);
                             pixelIndex++;
                         }
                     }
