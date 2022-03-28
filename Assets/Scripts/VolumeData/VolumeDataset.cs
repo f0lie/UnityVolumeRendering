@@ -175,14 +175,14 @@ namespace UnityVolumeRendering
 
                 texture.SetPixelData(bytes, 0);
             }
-
+            
             catch (OutOfMemoryException ex)
             {
                 Debug.LogWarning("Out of memory when creating texture. Using fallback method.");
                 for (int x = 0; x < dimX; x++)
                     for (int y = 0; y < dimY; y++)
                         for (int z = 0; z < dimZ; z++)
-                            texture.SetPixel(x, y, z, new Color(0, 0.0f, 0.0f, 0.0f));
+                            texture.SetPixel(x, y, z, new Color((float)(data[x + y * dimX + z * (dimX * dimY)] - minValue) / maxRange, 0.0f, 0.0f, 0.0f));
             }
             texture.Apply();
             return texture;
