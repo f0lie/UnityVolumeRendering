@@ -138,39 +138,26 @@ namespace UnityVolumeRendering
         {
             if(table == null) FillLookupTable();
 
-            TextureFormat texformat = TextureFormat.RGBA32;
+            TextureFormat texformat = SystemInfo.SupportsTextureFormat(TextureFormat.RHalf) ? TextureFormat.RHalf : TextureFormat.RFloat; // change to RGBAFloat or RGBAHalf
             Texture3D texture = new Texture3D(dimX, dimY, dimZ, texformat, false);
             texture.wrapMode = TextureWrapMode.Clamp;
 
-            //float minValue = GetMinDataValue(); //probably need to get rid of min and max entirely
-            //float maxValue = GetMaxDataValue();
-            //float maxRange = maxValue - minValue;
+            float minValue = GetMinDataValue(); //probably need to get rid of min and max entirely
+            float maxValue = GetMaxDataValue();
+            float maxRange = maxValue - minValue;
 
-            bool isHalfFloat = texformat == TextureFormat.RGBA32;
-            Debug.Log(isHalfFloat);
-            int iData = 0;
+            bool isHalfFloat = texformat == TextureFormat.RHalf;
             try
             {
-                // Create a byte array for filling the texture. RGBA64 has 4 2 byte ints, RGBA32 has 4 1 byte ints
-                int sampleSize = isHalfFloat ? 1 : 2;
-                byte[] bytes = new byte[data.Length * sampleSize * 4]; // This can cause OutOfMemoryException
-                for (; iData < data.Length; iData++)
+                // Create a byte array for filling the texture. Store has half (16 bit) or single (32 bit) float values.
+                int sampleSize = isHalfFloat ? 2 : 4;
+                byte[] bytes = new byte[data.Length * sampleSize]; // This can cause OutOfMemoryException
+                for (int iData = 0; iData < data.Length; iData++)
                 {
-                    int val = (int)data[iData];
-                    BrainSection pixelValue = table[val];
-                    
-                    byte[] RBytes = isHalfFloat ? BitConverter.GetBytes(Convert.ToByte(pixelValue.r)) : BitConverter.GetBytes(Convert.ToInt16(pixelValue.r));
-                    Array.Copy(RBytes, 0, bytes, iData * sampleSize * 4, sampleSize);
+                    float pixelValue = (float)(data[iData] - minValue) / maxRange;
+                    byte[] pixelBytes = isHalfFloat ? BitConverter.GetBytes(Mathf.FloatToHalf(pixelValue)) : BitConverter.GetBytes(pixelValue);
 
-                    byte[] GBytes = isHalfFloat ? BitConverter.GetBytes(Convert.ToByte(pixelValue.g)) : BitConverter.GetBytes(Convert.ToInt16(pixelValue.g));
-                    Array.Copy(GBytes, 0, bytes, iData * sampleSize * 4 + sampleSize, sampleSize);
-
-                    byte[] BBytes = isHalfFloat ? BitConverter.GetBytes(Convert.ToByte(pixelValue.b)) : BitConverter.GetBytes(Convert.ToInt16(pixelValue.b));
-                    Array.Copy(BBytes, 0, bytes, iData * sampleSize * 4 + (sampleSize * 2), sampleSize);
-
-                    int alpha = val == 0 ? 0 : 250;
-                    byte[] ABytes = isHalfFloat ? BitConverter.GetBytes(Convert.ToByte(alpha)) : BitConverter.GetBytes(Convert.ToInt16(alpha));
-                    Array.Copy(ABytes, 0, bytes, iData * sampleSize * 4 + (sampleSize * 3), sampleSize);
+                    Array.Copy(pixelBytes, 0, bytes, iData * sampleSize, sampleSize);
                 }
 
                 texture.SetPixelData(bytes, 0);
