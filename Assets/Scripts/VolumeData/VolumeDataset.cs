@@ -3,6 +3,7 @@ using System.IO;
 using System.Collections.Generic;
 using UnityEngine;
 using System.Globalization;
+using System.Runtime.InteropServices;
 
 namespace UnityVolumeRendering
 {
@@ -165,7 +166,15 @@ namespace UnityVolumeRendering
                 for (int iData = 0; iData < data.Length; iData++)
                 {
                     int val = (int)data[iData];
-                    BrainSection pixelValue = table[val];
+                    
+                    BrainSection pixelValue;
+                    try {
+                        pixelValue = table[val];
+                    } catch(KeyNotFoundException e) {
+                        Debug.Log("Key Not Found Exception");
+                        pixelValue = table[0];
+                    }
+
                     byte[] pixelBytes = BitConverter.GetBytes(pixelValue.intensity);
 
                     Array.Copy(pixelBytes, 0, bytes, iData * sampleSize, sampleSize);
