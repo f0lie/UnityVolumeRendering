@@ -51,6 +51,8 @@ namespace UnityVolumeRendering
 
         public List<DICOMSeries> LoadDICOMSeries()
         {
+            Debug.Log("Load");
+
             DataElementDictionary dataElementDictionary = new DataElementDictionary();
             UidDictionary uidDictionary = new UidDictionary();
             try

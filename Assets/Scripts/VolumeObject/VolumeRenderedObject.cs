@@ -19,11 +19,9 @@ namespace UnityVolumeRendering
 
         private RenderMode renderMode;
         private TFRenderMode tfRenderMode;
-        private bool lightingEnabled;
+        private bool lightingEnabled = true;
 
         private Vector2 visibilityWindow = new Vector2(0.0f, 1.0f);
-
-        private float rotationSpeed = 8.0F;
 
         public SlicingPlane CreateSlicingPlane()
         {
@@ -152,22 +150,6 @@ namespace UnityVolumeRendering
         private void Start()
         {
             UpdateMaaterialProperties();
-        }
-
-        void Update()
-        {
-            RotateObject();
-        }
-
-        void RotateObject()
-        {
-            if (Input.GetMouseButton(0)) {
-                float XaxisRotation = rotationSpeed * Input.GetAxis("Mouse X") * Mathf.Deg2Rad;
-                float YaxisRotation = rotationSpeed * Input.GetAxis("Mouse Y") * Mathf.Deg2Rad;
-                
-                transform.RotateAround(Vector3.up, -XaxisRotation);
-                transform.RotateAround(Vector3.right, YaxisRotation);
-            }
         }
     }
 }

@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.IO.Compression;
 using UnityEngine;
+using UnityEngine.Networking;
 
 namespace UnityVolumeRendering
 {
@@ -13,42 +15,6 @@ namespace UnityVolumeRendering
     /// </summary>
     public class RuntimeGUI : MonoBehaviour
     {
-        private void OnGUI()
-        {
-            GUILayout.BeginVertical();
-
-            
-            // Show dataset import buttons
-            if(GUILayout.Button("Import RAW dataset"))
-            {
-                RuntimeFileBrowser.ShowOpenFileDialog(OnOpenRAWDatasetResult, "DataFiles");
-            }
-
-            if(GUILayout.Button("Import PARCHG dataset"))
-            {
-                RuntimeFileBrowser.ShowOpenFileDialog(OnOpenPARDatasetResult, "DataFiles");
-            }
-
-            if (GUILayout.Button("Import DICOM dataset"))
-            {
-                RuntimeFileBrowser.ShowOpenDirectoryDialog(OnOpenDICOMDatasetResult);
-            }
-
-            // Show button for opening the dataset editor (for changing the visualisation)
-            if (GameObject.FindObjectOfType<VolumeRenderedObject>() != null && GUILayout.Button("Edit imported dataset"))
-            {
-                EditVolumeGUI.ShowWindow(GameObject.FindObjectOfType<VolumeRenderedObject>());
-            }
-
-            // Show button for opening the slicing plane editor (for changing the orientation and position)
-            if (GameObject.FindObjectOfType<SlicingPlane>() != null && GUILayout.Button("Edit slicing plane"))
-            {
-                EditSliceGUI.ShowWindow(GameObject.FindObjectOfType<SlicingPlane>());
-            }
-
-            GUILayout.EndVertical();
-        }
-
         private void OnOpenPARDatasetResult(RuntimeFileBrowser.DialogResult result)
         {
             if (!result.cancelled)
@@ -93,33 +59,43 @@ namespace UnityVolumeRendering
             }
         }
 
-        private void OnOpenDICOMDatasetResult(RuntimeFileBrowser.DialogResult result)
+        IEnumerator<UnityWebRequestAsyncOperation> OnOpenDICOMDatasetResult(string url)
         {
-            if (!result.cancelled)
+            DespawnAllDatasets();
+            // Import the dataset
+            string[] urlSplit = url.Split('/');
+            string filename = urlSplit[urlSplit.Length - 1];
+            string savePath = "";
+            using (UnityWebRequest webRequest = UnityWebRequest.Get(url))
             {
-                // We'll only allow one dataset at a time in the runtime GUI (for simplicity)
-                DespawnAllDatasets();
+                yield return webRequest.SendWebRequest();
+                if (webRequest.result == UnityWebRequest.Result.ConnectionError || webRequest.result == UnityWebRequest.Result.ProtocolError) {
+                    Debug.Log("Server Error");
+                    // TODO: Error handling
+                    yield break;
+                }
 
-                bool recursive = true;
+                savePath = string.Format("{0}/{1}", Application.persistentDataPath, filename);        
+                System.IO.File.WriteAllBytes(savePath + ".zip", webRequest.downloadHandler.data);
+                ZipFile.ExtractToDirectory(savePath, Application.persistentDataPath);
+                System.IO.File.Delete(savePath);
+            }
 
-                // Read all files
-                IEnumerable<string> fileCandidates = Directory.EnumerateFiles(result.path, "*.*", recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly)
+            IEnumerable<string> fileCandidates = Directory.EnumerateFiles(savePath, "*.*", SearchOption.TopDirectoryOnly)
                     .Where(p => p.EndsWith(".dcm", StringComparison.InvariantCultureIgnoreCase) || p.EndsWith(".dicom", StringComparison.InvariantCultureIgnoreCase) || p.EndsWith(".dicm", StringComparison.InvariantCultureIgnoreCase));
 
-                // Import the dataset
-                DICOMImporter importer = new DICOMImporter(fileCandidates, Path.GetFileName(result.path));
-                List<DICOMImporter.DICOMSeries> seriesList = importer.LoadDICOMSeries();
-                float numVolumesCreated = 0;
-                foreach (DICOMImporter.DICOMSeries series in seriesList)
+            DICOMImporter importer = new DICOMImporter(fileCandidates, filename);
+            List<DICOMImporter.DICOMSeries> seriesList = importer.LoadDICOMSeries();
+            float numVolumesCreated = 0;
+            foreach (DICOMImporter.DICOMSeries series in seriesList)
+            {
+                VolumeDataset dataset = importer.ImportDICOMSeries(series);
+                // Spawn the object
+                if (dataset != null)
                 {
-                    VolumeDataset dataset = importer.ImportDICOMSeries(series);
-                    // Spawn the object
-                    if (dataset != null)
-                    {
-                        VolumeRenderedObject obj = VolumeObjectFactory.CreateObject(dataset);
-                        obj.transform.position = new Vector3(numVolumesCreated, 0, 0);
-                        numVolumesCreated++;
-                    }
+                    VolumeRenderedObject obj = VolumeObjectFactory.CreateObject(dataset);
+                    obj.transform.position = new Vector3(numVolumesCreated, 0, 0);
+                    numVolumesCreated++;
                 }
             }
         }
