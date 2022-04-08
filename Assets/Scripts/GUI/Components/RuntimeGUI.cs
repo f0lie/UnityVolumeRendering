@@ -15,6 +15,13 @@ namespace UnityVolumeRendering
     /// </summary>
     public class RuntimeGUI : MonoBehaviour
     {
+        private bool ranOpen = false;
+        /*private void OnGUI()
+        {
+            if(!ranOpen)
+                OnOpenDICOMDatasetResultLocal("C:\\Users\\austi\\OneDrive\\Desktop\\SeniorProjFiles\\PythonScript\\a2009s");
+        }*/
+
         private void OnOpenPARDatasetResult(RuntimeFileBrowser.DialogResult result)
         {
             if (!result.cancelled)
@@ -75,13 +82,46 @@ namespace UnityVolumeRendering
                     yield break;
                 }
 
-                savePath = string.Format("{0}/{1}", Application.persistentDataPath, filename);        
-                System.IO.File.WriteAllBytes(savePath + ".zip", webRequest.downloadHandler.data);
-                ZipFile.ExtractToDirectory(savePath, Application.persistentDataPath);
-                System.IO.File.Delete(savePath);
+                savePath = string.Format("{0}/{1}", Application.persistentDataPath, filename);  
+                zipFileName = savePath + ".zip";    
+                System.IO.File.WriteAllBytes(zipFileName, webRequest.downloadHandler.data);
+                ZipFile.ExtractToDirectory(zipFileName, Application.persistentDataPath);
+                System.IO.File.Delete(zipFileName);
             }
 
             IEnumerable<string> fileCandidates = Directory.EnumerateFiles(savePath, "*.*", SearchOption.TopDirectoryOnly)
+                    .Where(p => p.EndsWith(".dcm", StringComparison.InvariantCultureIgnoreCase) || p.EndsWith(".dicom", StringComparison.InvariantCultureIgnoreCase) || p.EndsWith(".dicm", StringComparison.InvariantCultureIgnoreCase));
+
+            DICOMImporter importer = new DICOMImporter(fileCandidates, filename);
+            List<DICOMImporter.DICOMSeries> seriesList = importer.LoadDICOMSeries();
+            float numVolumesCreated = 0;
+            foreach (DICOMImporter.DICOMSeries series in seriesList)
+            {
+                VolumeDataset dataset = importer.ImportDICOMSeries(series);
+                // Spawn the object
+                if (dataset != null)
+                {
+                    VolumeRenderedObject obj = VolumeObjectFactory.CreateObject(dataset);
+                    obj.transform.position = new Vector3(numVolumesCreated, 0, 0);
+                    numVolumesCreated++;
+                }
+            }
+        }
+
+        // For testing purposes
+        private void OnOpenDICOMDatasetResultLocal(string path)
+        {
+            ranOpen = true;
+            DespawnAllDatasets();
+            // Import the dataset
+            string[] pathSplit = path.Split('\\');
+            string filename = pathSplit[pathSplit.Length - 1];
+            //string.Format("{0}/{1}", Application.persistentDataPath, filename);        
+            //System.IO.File.WriteAllBytes(savePath + ".zip", webRequest.downloadHandler.data);
+            ZipFile.ExtractToDirectory(path + ".zip", Application.persistentDataPath);
+            System.IO.File.Delete(path + ".zip");
+
+            IEnumerable<string> fileCandidates = Directory.EnumerateFiles(Application.persistentDataPath + "\\" + filename, "*.*", SearchOption.TopDirectoryOnly)
                     .Where(p => p.EndsWith(".dcm", StringComparison.InvariantCultureIgnoreCase) || p.EndsWith(".dicom", StringComparison.InvariantCultureIgnoreCase) || p.EndsWith(".dicm", StringComparison.InvariantCultureIgnoreCase));
 
             DICOMImporter importer = new DICOMImporter(fileCandidates, filename);
