@@ -16,12 +16,14 @@ namespace UnityVolumeRendering
     public class RuntimeGUI : MonoBehaviour
     {
         private bool ranOpen = false;
-        private void OnGUI()
+
+        // for testing in Unity editor
+        /*private void OnGUI()
         {
             if(!ranOpen) {
                 StartCoroutine(OnOpenDICOMDatasetResult("http://localhost:8000/studies/test"));
             }
-        }
+        }*/
 
         private void OnOpenPARDatasetResult(RuntimeFileBrowser.DialogResult result)
         {
