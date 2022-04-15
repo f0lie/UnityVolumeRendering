@@ -16,11 +16,12 @@ namespace UnityVolumeRendering
     public class RuntimeGUI : MonoBehaviour
     {
         private bool ranOpen = false;
-        /*private void OnGUI()
+        private void OnGUI()
         {
-            if(!ranOpen)
-                OnOpenDICOMDatasetResultLocal("C:\\Users\\austi\\OneDrive\\Desktop\\SeniorProjFiles\\PythonScript\\a2009s");
-        }*/
+            if(!ranOpen) {
+                StartCoroutine(OnOpenDICOMDatasetResult("http://localhost:8000/studies/test"));
+            }
+        }
 
         private void OnOpenPARDatasetResult(RuntimeFileBrowser.DialogResult result)
         {
@@ -68,6 +69,7 @@ namespace UnityVolumeRendering
 
         IEnumerator<UnityWebRequestAsyncOperation> OnOpenDICOMDatasetResult(string url)
         {
+            ranOpen = true;
             DespawnAllDatasets();
             // Import the dataset
             string[] urlSplit = url.Split('/');
@@ -77,21 +79,20 @@ namespace UnityVolumeRendering
             {
                 yield return webRequest.SendWebRequest();
                 if (webRequest.result == UnityWebRequest.Result.ConnectionError || webRequest.result == UnityWebRequest.Result.ProtocolError) {
-                    Debug.Log("Server Error");
+                    Debug.Log(webRequest.error);
                     // TODO: Error handling
                     yield break;
                 }
 
                 savePath = string.Format("{0}/{1}", Application.persistentDataPath, filename);  
-                zipFileName = savePath + ".zip";    
+                string zipFileName = savePath + ".zip";    
                 System.IO.File.WriteAllBytes(zipFileName, webRequest.downloadHandler.data);
                 ZipFile.ExtractToDirectory(zipFileName, Application.persistentDataPath);
                 System.IO.File.Delete(zipFileName);
             }
-
+            
             IEnumerable<string> fileCandidates = Directory.EnumerateFiles(savePath, "*.*", SearchOption.TopDirectoryOnly)
                     .Where(p => p.EndsWith(".dcm", StringComparison.InvariantCultureIgnoreCase) || p.EndsWith(".dicom", StringComparison.InvariantCultureIgnoreCase) || p.EndsWith(".dicm", StringComparison.InvariantCultureIgnoreCase));
-
             DICOMImporter importer = new DICOMImporter(fileCandidates, filename);
             List<DICOMImporter.DICOMSeries> seriesList = importer.LoadDICOMSeries();
             float numVolumesCreated = 0;

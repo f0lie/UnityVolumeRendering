@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 
+
 namespace UnityVolumeRendering
 {
     [ExecuteInEditMode]
@@ -22,6 +23,23 @@ namespace UnityVolumeRendering
         private bool lightingEnabled = true;
 
         private Vector2 visibilityWindow = new Vector2(0.0f, 1.0f);
+
+        void Update()
+        {
+            RotateObject();
+        }
+
+        private float rotationSpeed = 8.0F;
+        void RotateObject()
+        {
+            if (Input.GetMouseButton(0)) {
+                float XaxisRotation = rotationSpeed * Input.GetAxis("Mouse X") * Mathf.Deg2Rad;
+                float YaxisRotation = rotationSpeed * Input.GetAxis("Mouse Y") * Mathf.Deg2Rad;
+
+                transform.RotateAround(Vector3.up, -XaxisRotation);
+                transform.RotateAround(Vector3.right, YaxisRotation);
+            }
+        }
 
         public SlicingPlane CreateSlicingPlane()
         {
@@ -150,6 +168,7 @@ namespace UnityVolumeRendering
         private void Start()
         {
             UpdateMaaterialProperties();
+            gameObject.transform.Translate(-0.27f, -0.6f, -0.35f);
         }
     }
 }
