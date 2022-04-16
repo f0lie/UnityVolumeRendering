@@ -24,7 +24,10 @@ namespace UnityVolumeRendering
                 StartCoroutine(OnOpenDICOMDatasetResult("http://localhost:8000/studies/test"));
             }
         }*/
-
+        public void DisplayDicom(string url)
+        {
+            StartCoroutine(OnOpenDICOMDatasetResult(url));
+        }
         private void OnOpenPARDatasetResult(RuntimeFileBrowser.DialogResult result)
         {
             if (!result.cancelled)
