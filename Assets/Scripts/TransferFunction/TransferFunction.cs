@@ -41,6 +41,7 @@ namespace UnityVolumeRendering
             if (texture == null)
                 CreateTexture();
 
+            //Debug.Log("TransferFunction.GenerateTexture");
             List<TFColourControlPoint> cols = new List<TFColourControlPoint>(colourControlPoints);
             List<TFAlphaControlPoint> alphas = new List<TFAlphaControlPoint>(alphaControlPoints);
 
@@ -100,6 +101,7 @@ namespace UnityVolumeRendering
 
         private void CreateTexture()
         {
+                        //Debug.Log("TransferFunction.CreateNewTexture");
             TextureFormat texformat = SystemInfo.SupportsTextureFormat(TextureFormat.RGBAHalf) ? TextureFormat.RGBAHalf : TextureFormat.RGBAFloat;
             texture = new Texture2D(TEXTURE_WIDTH, TEXTURE_HEIGHT, texformat, false);
             tfCols = new Color[TEXTURE_WIDTH * TEXTURE_HEIGHT];

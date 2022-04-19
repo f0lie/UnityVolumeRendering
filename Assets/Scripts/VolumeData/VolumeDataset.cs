@@ -1,6 +1,9 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
 using UnityEngine;
+using System.Globalization;
+using System.Runtime.InteropServices;
 
 namespace UnityVolumeRendering
 {
@@ -31,18 +34,38 @@ namespace UnityVolumeRendering
 
         private Texture3D dataTexture = null;
         private Texture3D gradientTexture = null;
-        
+
+        public static Dictionary<int, float> table;
+
+        public static async void FillLookupTable()
+        {
+            table = new Dictionary<int, float>();
+            TextAsset file = Resources.Load<TextAsset>("FreeSurferValues");
+            string lookupTable = file.ToString();
+            string[] rows = lookupTable.Split('\n');
+            for(int i = 0; i < rows.Length - 1; ++i)
+            {
+                string[] elements = rows[i].Split('\t'); // each element is seperated by a tab
+                int index = Int32.Parse(elements[0]);
+                table[index] = ParseFloat(elements[6]);
+            }
+        }
+
+        public static float ParseFloat(string s)
+        {
+            return float.Parse(s, CultureInfo.InvariantCulture.NumberFormat);
+        }
         
         public Texture3D GetDataTexture()
         {
-            if (dataTexture == null)
+            if(dataTexture == null)
                 dataTexture = CreateTextureInternal();
             return dataTexture;
         }
 
         public Texture3D GetGradientTexture()
         {
-            if (gradientTexture == null)
+            if(gradientTexture == null)
                 gradientTexture = CreateGradientTextureInternal();
             return gradientTexture;
         }
@@ -60,21 +83,7 @@ namespace UnityVolumeRendering
                 CalculateValueBounds();
             return maxDataValue;
         }
-
-        /// <summary>
-        /// Ensures that the dataset is not too large.
-        /// </summary>
-        public void FixDimensions()
-        {
-            int MAX_DIM = 2048; // 3D texture max size. See: https://docs.unity3d.com/Manual/class-Texture3D.html
-
-            while (Mathf.Max(dimX, dimY, dimZ) > MAX_DIM)
-            {
-                Debug.LogWarning("Dimension exceeds limits (maximum: "+MAX_DIM+"). Dataset is downscaled by 2 on each axis!");
-                DownScaleData();
-            }
-        }
-
+        
         /// <summary>
         /// Downscales the data by averaging 8 voxels per each new voxel,
         /// and replaces downscaled data with the original data
@@ -122,24 +131,36 @@ namespace UnityVolumeRendering
 
         private Texture3D CreateTextureInternal()
         {
-            TextureFormat texformat = SystemInfo.SupportsTextureFormat(TextureFormat.RHalf) ? TextureFormat.RHalf : TextureFormat.RFloat;
+            if(table == null) FillLookupTable();
+
+            TextureFormat texformat = TextureFormat.RHalf; // change to RGBAFloat or RGBAHalf
             Texture3D texture = new Texture3D(dimX, dimY, dimZ, texformat, false);
             texture.wrapMode = TextureWrapMode.Clamp;
 
-            float minValue = GetMinDataValue();
-            float maxValue = GetMaxDataValue();
-            float maxRange = maxValue - minValue;
+            //float minValue = GetMinDataValue(); //probably need to get rid of min and max entirely
+            //float maxValue = GetMaxDataValue();
+            //float maxRange = maxValue - minValue;
 
             bool isHalfFloat = texformat == TextureFormat.RHalf;
             try
             {
                 // Create a byte array for filling the texture. Store has half (16 bit) or single (32 bit) float values.
-                int sampleSize = isHalfFloat ? 2 : 4;
+                int sampleSize = 2;// isHalfFloat ? 2 : 4;
                 byte[] bytes = new byte[data.Length * sampleSize]; // This can cause OutOfMemoryException
+                Debug.Log("In pixel func");
                 for (int iData = 0; iData < data.Length; iData++)
                 {
-                    float pixelValue = (float)(data[iData] - minValue) / maxRange;
-                    byte[] pixelBytes = isHalfFloat ? BitConverter.GetBytes(Mathf.FloatToHalf(pixelValue)) : BitConverter.GetBytes(pixelValue);
+                    int val = (int)data[iData];
+
+                    float pixelValue;
+                    try {
+                        pixelValue = table[val];
+                    } catch(KeyNotFoundException e) {
+                        Debug.Log("Key Not Found Exception");
+                        pixelValue = table[0];
+                    }
+
+                    byte[] pixelBytes = BitConverter.GetBytes(Mathf.FloatToHalf(pixelValue));
 
                     Array.Copy(pixelBytes, 0, bytes, iData * sampleSize, sampleSize);
                 }
@@ -149,11 +170,11 @@ namespace UnityVolumeRendering
             
             catch (OutOfMemoryException ex)
             {
-                Debug.LogWarning("Out of memory when creating texture. Using fallback method.");
+                Debug.Log("Out of memory when creating texture. Using fallback method.");
                 for (int x = 0; x < dimX; x++)
                     for (int y = 0; y < dimY; y++)
                         for (int z = 0; z < dimZ; z++)
-                            texture.SetPixel(x, y, z, new Color((float)(data[x + y * dimX + z * (dimX * dimY)] - minValue) / maxRange, 0.0f, 0.0f, 0.0f));
+                            texture.SetPixel(x, y, z, new Color((float)(data[x + y * dimX + z * (dimX * dimY)]), 0.0f, 0.0f, 0.0f));
             }
             texture.Apply();
             return texture;
@@ -161,6 +182,8 @@ namespace UnityVolumeRendering
 
         private Texture3D CreateGradientTextureInternal() 
         {
+            if(table == null) FillLookupTable();
+            
             TextureFormat texformat = SystemInfo.SupportsTextureFormat(TextureFormat.RGBAHalf) ? TextureFormat.RGBAHalf : TextureFormat.RGBAFloat;
             Texture3D texture = new Texture3D(dimX, dimY, dimZ, texformat, false);
             texture.wrapMode = TextureWrapMode.Clamp;

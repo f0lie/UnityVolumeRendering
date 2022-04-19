@@ -4,7 +4,6 @@
     {
         _DataTex ("Data Texture (Generated)", 3D) = "" {}
         _GradientTex("Gradient Texture (Generated)", 3D) = "" {}
-        _NoiseTex("Noise Texture (Generated)", 2D) = "white" {}
         _TFTex("Transfer Function Texture (Generated)", 2D) = "" {}
         _MinVal("Min val", Range(0.0, 1.0)) = 0.0
         _MaxVal("Max val", Range(0.0, 1.0)) = 1.0
@@ -26,8 +25,6 @@
             #pragma multi_compile __ CUTOUT_PLANE CUTOUT_BOX_INCL CUTOUT_BOX_EXCL
             #pragma multi_compile __ LIGHTING_ON
             #pragma multi_compile DEPTHWRITE_ON DEPTHWRITE_OFF
-            #pragma multi_compile __ DVR_BACKWARD_ON
-            #pragma multi_compile __ RAY_TERMINATE_ON
             #pragma vertex vert
             #pragma fragment frag
 
@@ -60,7 +57,6 @@
 
             sampler3D _DataTex;
             sampler3D _GradientTex;
-            sampler2D _NoiseTex;
             sampler2D _TFTex;
 
             float _MinVal;
@@ -69,88 +65,6 @@
 #if CUTOUT_ON
             float4x4 _CrossSectionMatrix;
 #endif
-
-            struct RayInfo
-            {
-                float3 startPos;
-                float3 endPos;
-                float3 direction;
-                float2 aabbInters;
-            };
-
-            struct RaymarchInfo
-            {
-                RayInfo ray;
-                int numSteps;
-                float numStepsRecip;
-                float stepSize;
-            };
-
-            float3 getViewRayDir(float3 vertexLocal)
-            {
-                if(unity_OrthoParams.w == 0)
-                {
-                    // Perspective
-                    return normalize(ObjSpaceViewDir(float4(vertexLocal, 0.0f)));
-                }
-                else
-                {
-                    // Orthographic
-                    float3 camfwd = mul((float3x3)unity_CameraToWorld, float3(0,0,-1));
-                    float4 camfwdobjspace = mul(unity_WorldToObject, camfwd);
-                    return normalize(camfwdobjspace);
-                }
-            }
-
-            // Find ray intersection points with axis aligned bounding box
-            float2 intersectAABB(float3 rayOrigin, float3 rayDir, float3 boxMin, float3 boxMax)
-            {
-                float3 tMin = (boxMin - rayOrigin) / rayDir;
-                float3 tMax = (boxMax - rayOrigin) / rayDir;
-                float3 t1 = min(tMin, tMax);
-                float3 t2 = max(tMin, tMax);
-                float tNear = max(max(t1.x, t1.y), t1.z);
-                float tFar = min(min(t2.x, t2.y), t2.z);
-                return float2(tNear, tFar);
-            };
-
-            // Get a ray for the specified fragment (back-to-front)
-            RayInfo getRayBack2Front(float3 vertexLocal)
-            {
-                RayInfo ray;
-                ray.direction = getViewRayDir(vertexLocal);
-                ray.startPos = vertexLocal + float3(0.5f, 0.5f, 0.5f);
-                // Find intersections with axis aligned boundinng box (the volume)
-                ray.aabbInters = intersectAABB(ray.startPos, ray.direction, float3(0.0, 0.0, 0.0), float3(1.0f, 1.0f, 1.0));
-
-                // Check if camera is inside AABB
-                const float3 farPos = ray.startPos + ray.direction * ray.aabbInters.y - float3(0.5f, 0.5f, 0.5f);
-                float4 clipPos = UnityObjectToClipPos(float4(farPos, 1.0f));
-                ray.aabbInters += min(clipPos.w, 0.0);
-
-                ray.endPos = ray.startPos + ray.direction * ray.aabbInters.y;
-                return ray;
-            }
-
-            // Get a ray for the specified fragment (front-to-back)
-            RayInfo getRayFront2Back(float3 vertexLocal)
-            {
-                RayInfo ray = getRayBack2Front(vertexLocal);
-                ray.direction = -ray.direction;
-                float3 tmp = ray.startPos;
-                ray.startPos = ray.endPos;
-                ray.endPos = tmp;
-                return ray;
-            }
-
-            RaymarchInfo initRaymarch(RayInfo ray, int maxNumSteps)
-            {
-                RaymarchInfo raymarchInfo;
-                raymarchInfo.stepSize = 1.732f/*greatest distance in box*/ / maxNumSteps;
-                raymarchInfo.numSteps = (int)clamp(abs(ray.aabbInters.x - ray.aabbInters.y) / raymarchInfo.stepSize, 1, maxNumSteps);
-                raymarchInfo.numStepsRecip = 1.0 / raymarchInfo.numSteps;
-                return raymarchInfo;
-            }
 
             // Gets the colour from a 1D Transfer Function (x = density)
             float4 getTF1DColour(float density)
@@ -232,33 +146,28 @@
             }
 
             // Direct Volume Rendering
-            frag_out frag_dvr(frag_in i)
+            frag_out frag_dvr (frag_in i)
             {
-                #define MAX_NUM_STEPS 512
-                #define OPACITY_THRESHOLD (1.0 - 1.0 / 255.0)
+                #define NUM_STEPS 512
 
-#ifdef DVR_BACKWARD_ON
-                RayInfo ray = getRayBack2Front(i.vertexLocal);
-#else
-                RayInfo ray = getRayFront2Back(i.vertexLocal);
-#endif
-                RaymarchInfo raymarchInfo = initRaymarch(ray, MAX_NUM_STEPS);
+                const float stepSize = 1.732f/*greatest distance in box*/ / NUM_STEPS;
 
+                float3 rayStartPos = i.vertexLocal + float3(0.5f, 0.5f, 0.5f);
                 float3 lightDir = normalize(ObjSpaceViewDir(float4(float3(0.0f, 0.0f, 0.0f), 0.0f)));
+                float3 rayDir = ObjSpaceViewDir(float4(i.vertexLocal, 0.0f));
+                rayDir = normalize(rayDir);
 
                 // Create a small random offset in order to remove artifacts
-                ray.startPos += (2.0f * ray.direction * raymarchInfo.stepSize) * tex2D(_NoiseTex, float2(i.uv.x, i.uv.y)).r;
+                rayStartPos = rayStartPos + (2.0f * rayDir / NUM_STEPS);
 
                 float4 col = float4(0.0f, 0.0f, 0.0f, 0.0f);
-#ifdef DVR_BACKWARD_ON
-                float tDepth = 0.0f;
-#else
-                float tDepth = raymarchInfo.numStepsRecip * (raymarchInfo.numSteps - 1);
-#endif
-                for (int iStep = 0; iStep < raymarchInfo.numSteps; iStep++)
+                uint iDepth = 0;
+                for (uint iStep = 0; iStep < NUM_STEPS; iStep++)
                 {
-                    const float t = iStep * raymarchInfo.numStepsRecip;
-                    const float3 currPos = lerp(ray.startPos, ray.endPos, t);
+                    const float t = iStep * stepSize;
+                    const float3 currPos = rayStartPos + rayDir * t;
+                    if (currPos.x < 0.0f || currPos.x >= 1.0f || currPos.y < 0.0f || currPos.y > 1.0f || currPos.z < 0.0f || currPos.z > 1.0f) // TODO: avoid branch?
+                        break;
 
                     // Perform slice culling (cross section plane)
 #ifdef CUTOUT_ON
@@ -268,9 +177,6 @@
 
                     // Get the dansity/sample value of the current position
                     const float density = getDensity(currPos);
-
-                    // Apply visibility window
-                    if (density < _MinVal || density > _MaxVal) continue;
 
                     // Calculate gradient (needed for lighting and 2D transfer functions)
 #if defined(TF2D_ON) || defined(LIGHTING_ON)
@@ -286,42 +192,31 @@
 #endif
 
                     // Apply lighting
-#if defined(LIGHTING_ON) && defined(DVR_BACKWARD_ON)
-                    src.rgb = calculateLighting(src.rgb, normalize(gradient), lightDir, ray.direction, 0.3f);
-#elif defined(LIGHTING_ON)
-                    src.rgb = calculateLighting(src.rgb, normalize(gradient), lightDir, -ray.direction, 0.3f);
+#ifdef LIGHTING_ON
+                    src.rgb = calculateLighting(src.rgb, normalize(gradient), lightDir, rayDir, 0.3f);
 #endif
 
-#ifdef DVR_BACKWARD_ON
-                    col.rgb = src.a * src.rgb + (1.0f - src.a) * col.rgb;
-                    col.a = src.a + (1.0f - src.a) * col.a;
+                    if (density < _MinVal || density > _MaxVal)
+                        src.a = 0.0f;
 
-                    // Optimisation: A branchless version of: if (src.a > 0.15f) tDepth = t;
-                    tDepth = max(tDepth, t * step(0.15, src.a));
-#else
-                    src.rgb *= src.a;
-                    col = (1.0f - col.a) * src + col;
+                    col.rgb = src.a * src.rgb + (1.0f - src.a)*col.rgb;
+                    col.a = src.a + (1.0f - src.a)*col.a;
 
-                    if (col.a > 0.15 && t < tDepth) {
-                        tDepth = t;
-                    }
-#endif
+                    if (src.a > 0.15f)
+                        iDepth = iStep;
 
-                    // Early ray termination
-#if !defined(DVR_BACKWARD_ON) && defined(RAY_TERMINATE_ON)
-                    if (col.a > OPACITY_THRESHOLD) {
+                    if (col.a > 1.0f)
                         break;
-                    }
-#endif
                 }
 
                 // Write fragment output
                 frag_out output;
                 output.colour = col;
 #if DEPTHWRITE_ON
-                tDepth += (step(col.a, 0.0) * 1000.0); // Write large depth if no hit
-                const float3 depthPos = lerp(ray.startPos, ray.endPos, tDepth) - float3(0.5f, 0.5f, 0.5f);
-                output.depth = localToDepth(depthPos);
+                if (iDepth != 0)
+                    output.depth = localToDepth(rayStartPos + rayDir * (iDepth * stepSize) - float3(0.5f, 0.5f, 0.5f));
+                else
+                    output.depth = 0;
 #endif
                 return output;
             }
@@ -329,36 +224,37 @@
             // Maximum Intensity Projection mode
             frag_out frag_mip(frag_in i)
             {
-                #define MAX_NUM_STEPS 512
+                #define NUM_STEPS 512
+                const float stepSize = 1.732f/*greatest distance in box*/ / NUM_STEPS;
 
-                RayInfo ray = getRayBack2Front(i.vertexLocal);
-                RaymarchInfo raymarchInfo = initRaymarch(ray, MAX_NUM_STEPS);
+                float3 rayStartPos = i.vertexLocal + float3(0.5f, 0.5f, 0.5f);
+                float3 rayDir = ObjSpaceViewDir(float4(i.vertexLocal, 0.0f));
+                rayDir = normalize(rayDir);
 
                 float maxDensity = 0.0f;
-                float3 maxDensityPos = ray.startPos;
-                for (int iStep = 0; iStep < raymarchInfo.numSteps; iStep++)
+                for (uint iStep = 0; iStep < NUM_STEPS; iStep++)
                 {
-                    const float t = iStep * raymarchInfo.numStepsRecip;
-                    const float3 currPos = lerp(ray.startPos, ray.endPos, t);
-                    
+                    const float t = iStep * stepSize;
+                    const float3 currPos = rayStartPos + rayDir * t;
+                    // Stop when we are outside the box
+                    if (currPos.x < -0.0001f || currPos.x >= 1.0001f || currPos.y < -0.0001f || currPos.y > 1.0001f || currPos.z < -0.0001f || currPos.z > 1.0001f) // TODO: avoid branch?
+                        break;
+
 #ifdef CUTOUT_ON
                     if (IsCutout(currPos))
                         continue;
 #endif
 
                     const float density = getDensity(currPos);
-                    if (density > maxDensity && density > _MinVal && density < _MaxVal)
-                    {
-                        maxDensity = density;
-                        maxDensityPos = currPos;
-                    }
+                    if (density > _MinVal && density < _MaxVal)
+                        maxDensity = max(density, maxDensity);
                 }
 
                 // Write fragment output
                 frag_out output;
                 output.colour = float4(1.0f, 1.0f, 1.0f, maxDensity); // maximum intensity
 #if DEPTHWRITE_ON
-                output.depth = localToDepth(maxDensityPos - float3(0.5f, 0.5f, 0.5f));
+                output.depth = localToDepth(i.vertexLocal);
 #endif
                 return output;
             }
@@ -367,20 +263,27 @@
             // Draws the first point (closest to camera) with a density within the user-defined thresholds.
             frag_out frag_surf(frag_in i)
             {
-                #define MAX_NUM_STEPS 1024
+#define NUM_STEPS 1024
+                const float stepSize = 1.732f/*greatest distance in box*/ / NUM_STEPS;
 
-                RayInfo ray = getRayFront2Back(i.vertexLocal);
-                RaymarchInfo raymarchInfo = initRaymarch(ray, MAX_NUM_STEPS);
+                float3 rayStartPos = i.vertexLocal + float3(0.5f, 0.5f, 0.5f);
+                float3 rayDir = normalize(ObjSpaceViewDir(float4(i.vertexLocal, 0.0f)));
+                // Start from the end, tand trace towards the vertex
+                rayStartPos += rayDir * stepSize * NUM_STEPS;
+                rayDir = -rayDir;
 
                 // Create a small random offset in order to remove artifacts
-                ray.startPos = ray.startPos + (2.0f * ray.direction * raymarchInfo.stepSize) * tex2D(_NoiseTex, float2(i.uv.x, i.uv.y)).r;
+                rayStartPos = rayStartPos + (2.0f * rayDir / NUM_STEPS);
 
                 float4 col = float4(0,0,0,0);
-                for (int iStep = 0; iStep < raymarchInfo.numSteps; iStep++)
+                for (uint iStep = 0; iStep < NUM_STEPS; iStep++)
                 {
-                    const float t = iStep * raymarchInfo.numStepsRecip;
-                    const float3 currPos = lerp(ray.startPos, ray.endPos, t);
-                    
+                    const float t = iStep * stepSize;
+                    const float3 currPos = rayStartPos + rayDir * t;
+                    // Make sure we are inside the box
+                    if (currPos.x < 0.0f || currPos.x >= 1.0f || currPos.y < 0.0f || currPos.y > 1.0f || currPos.z < 0.0f || currPos.z > 1.0f) // TODO: avoid branch?
+                        continue;
+
 #ifdef CUTOUT_ON
                     if (IsCutout(currPos))
                         continue;
@@ -391,7 +294,7 @@
                     {
                         float3 normal = normalize(getGradient(currPos));
                         col = getTF1DColour(density);
-                        col.rgb = calculateLighting(col.rgb, normal, -ray.direction, -ray.direction, 0.15);
+                        col.rgb = calculateLighting(col.rgb, normal, -rayDir, -rayDir, 0.15);
                         col.a = 1.0f;
                         break;
                     }
@@ -401,9 +304,7 @@
                 frag_out output;
                 output.colour = col;
 #if DEPTHWRITE_ON
-                
-                const float tDepth = iStep * raymarchInfo.numStepsRecip + (step(col.a, 0.0) * 1000.0); // Write large depth if no hit
-                output.depth = localToDepth(lerp(ray.startPos, ray.endPos, tDepth) - float3(0.5f, 0.5f, 0.5f));
+                output.depth = localToDepth(rayStartPos + rayDir * (iStep * stepSize) - float3(0.5f, 0.5f, 0.5f));
 #endif
                 return output;
             }
