@@ -17,14 +17,13 @@ namespace UnityVolumeRendering
     {
         private bool ranOpen = false;
 
-        private DICOMImporter importer;
         // for testing in Unity editor
-        /*private void OnGUI()
+        private void OnGUI()
         {
             if(!ranOpen) {
                 StartCoroutine(OnOpenDICOMDatasetResult("http://localhost:8000/studies/test"));
             }
-        }*/
+        }
 
         public void DisplayDicom(string url)
         {
@@ -33,6 +32,7 @@ namespace UnityVolumeRendering
 
         IEnumerator<UnityWebRequestAsyncOperation> OnOpenDICOMDatasetResult(string url)
         {
+            
             ranOpen = true;
             DespawnAllDatasets();
             // Import the dataset
@@ -55,30 +55,34 @@ namespace UnityVolumeRendering
                     System.IO.File.Delete(zipFileName);
                 }
             }
-             
-            DICOMImporter.DICOMSeries series = GetSeries(savePath, filename);
-                //Debug.Log("Before IMport");
-            VolumeDataset dataset = importer.ImportDICOMSeries(series);
-            if (dataset != null) {
-                Debug.Log("Before CreateObj");
-                VolumeRenderedObject obj = VolumeObjectFactory.CreateObject(dataset);
-                Debug.Log("After CreateObj");
-                obj.transform.position = new Vector3(0, 0, 0);
-            }
-        }
-
-        private DICOMImporter.DICOMSeries GetSeries(string savePath, string filename)
-        {
+            
             IEnumerable<string> fileCandidates = Directory.EnumerateFiles(savePath, "*.*", SearchOption.TopDirectoryOnly)
                     .Where(p => p.EndsWith(".dcm", StringComparison.InvariantCultureIgnoreCase) || p.EndsWith(".dicom", StringComparison.InvariantCultureIgnoreCase) || p.EndsWith(".dicm", StringComparison.InvariantCultureIgnoreCase));
-            importer = new DICOMImporter(fileCandidates, filename);
+            Debug.Log("remote" + savePath);
+            DICOMImporter importer = new DICOMImporter(fileCandidates, filename);
             List<DICOMImporter.DICOMSeries> seriesList = importer.LoadDICOMSeries();
-            return seriesList.First();
+            float numVolumesCreated = 0;
+            foreach (DICOMImporter.DICOMSeries series in seriesList)
+            {
+                //Debug.Log("Before IMport");
+                VolumeDataset dataset = importer.ImportDICOMSeries(series);
+                Debug.Log("After IMport");
+                // Spawn the object
+                if (dataset != null)
+                {
+                    Debug.Log("Before CreateObj");
+                    VolumeRenderedObject obj = VolumeObjectFactory.CreateObject(dataset);
+                    Debug.Log("After CreateObj");
+                    obj.transform.position = new Vector3(numVolumesCreated, 0, 0);
+                    numVolumesCreated++;
+                }
+            }
         }
 
         // For testing purposes
         private void OnOpenDICOMDatasetResultLocal(string path)
         {
+            Debug.Log("local");
             ranOpen = true;
             DespawnAllDatasets();
             // Import the dataset

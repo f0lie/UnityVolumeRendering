@@ -10,6 +10,9 @@ namespace UnityVolumeRendering
         public TransferFunction transferFunction;
 
         [HideInInspector]
+        public TransferFunction2D transferFunction2D;
+
+        [HideInInspector]
         public VolumeDataset dataset;
 
         [HideInInspector]
@@ -53,6 +56,8 @@ namespace UnityVolumeRendering
             tfRenderMode = mode;
             if (tfRenderMode == TFRenderMode.TF1D && transferFunction != null)
                 transferFunction.GenerateTexture();
+            else if(transferFunction2D != null)
+                transferFunction2D.GenerateTexture();
             UpdateMaaterialProperties();
         }
 
@@ -99,7 +104,8 @@ namespace UnityVolumeRendering
 
             if(tfRenderMode == TFRenderMode.TF2D)
             {
-                Debug.Log("Invalid");
+                meshRenderer.sharedMaterial.SetTexture("_TFTex", transferFunction2D.GetTexture());
+                meshRenderer.sharedMaterial.EnableKeyword("TF2D_ON");
             }
             else
             {

@@ -35,19 +35,21 @@ namespace UnityVolumeRendering
         private Texture3D dataTexture = null;
         private Texture3D gradientTexture = null;
 
-        public static Dictionary<int, float> table;
+        public static Dictionary<int, BrainSection> table;
 
         public static async void FillLookupTable()
         {
-            table = new Dictionary<int, float>();
+            table = new Dictionary<int, BrainSection>();
             TextAsset file = Resources.Load<TextAsset>("FreeSurferValues");
             string lookupTable = file.ToString();
             string[] rows = lookupTable.Split('\n');
+            Debug.Log("Rows:" + rows.Length.ToString());
             for(int i = 0; i < rows.Length - 1; ++i)
             {
                 string[] elements = rows[i].Split('\t'); // each element is seperated by a tab
                 int index = Int32.Parse(elements[0]);
-                table[index] = ParseFloat(elements[6]);
+                table[index] = new BrainSection(ParseFloat(elements[2]), ParseFloat(elements[3]), ParseFloat(elements[4]), 
+                    ParseFloat(elements[5]), elements[1], ParseFloat(elements[6]));
             }
         }
 
@@ -83,7 +85,21 @@ namespace UnityVolumeRendering
                 CalculateValueBounds();
             return maxDataValue;
         }
-        
+
+        /// <summary>
+        /// Ensures that the dataset is not too large.
+        /// </summary>
+        public void FixDimensions()
+        {
+            int MAX_DIM = 2048; // 3D texture max size. See: https://docs.unity3d.com/Manual/class-Texture3D.html
+
+            while (Mathf.Max(dimX, dimY, dimZ) > MAX_DIM)
+            {
+                Debug.LogWarning("Dimension exceeds limits (maximum: "+MAX_DIM+"). Dataset is downscaled by 2 on each axis!");
+                DownScaleData();
+            }
+        }
+
         /// <summary>
         /// Downscales the data by averaging 8 voxels per each new voxel,
         /// and replaces downscaled data with the original data
@@ -133,7 +149,7 @@ namespace UnityVolumeRendering
         {
             if(table == null) FillLookupTable();
 
-            TextureFormat texformat = TextureFormat.RHalf; // change to RGBAFloat or RGBAHalf
+            TextureFormat texformat = TextureFormat.RFloat; // change to RGBAFloat or RGBAHalf
             Texture3D texture = new Texture3D(dimX, dimY, dimZ, texformat, false);
             texture.wrapMode = TextureWrapMode.Clamp;
 
@@ -145,22 +161,25 @@ namespace UnityVolumeRendering
             try
             {
                 // Create a byte array for filling the texture. Store has half (16 bit) or single (32 bit) float values.
-                int sampleSize = 2;// isHalfFloat ? 2 : 4;
+                int sampleSize = 4;// isHalfFloat ? 2 : 4;
                 byte[] bytes = new byte[data.Length * sampleSize]; // This can cause OutOfMemoryException
                 Debug.Log("In pixel func");
                 for (int iData = 0; iData < data.Length; iData++)
                 {
+                    
+                    
                     int val = (int)data[iData];
 
-                    float pixelValue;
+                    BrainSection pixelValue;
                     try {
                         pixelValue = table[val];
+                        //Debug.Log("Vals:" + val.ToString());
                     } catch(KeyNotFoundException e) {
-                        Debug.Log("Key Not Found Exception");
+                        //Debug.Log("Key Not Found Exception");
                         pixelValue = table[0];
                     }
 
-                    byte[] pixelBytes = BitConverter.GetBytes(Mathf.FloatToHalf(pixelValue));
+                    byte[] pixelBytes = BitConverter.GetBytes(pixelValue.intensity);
 
                     Array.Copy(pixelBytes, 0, bytes, iData * sampleSize, sampleSize);
                 }

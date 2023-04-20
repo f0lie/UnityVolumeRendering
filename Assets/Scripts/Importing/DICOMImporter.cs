@@ -8,8 +8,7 @@ using openDicom.DataStructure;
 using System.Collections.Generic;
 using openDicom.Image;
 using System.Linq;
-//using System.Runtime.InteropServices;
-//using System.Runtime.Remoting.Messaging;
+using System.Runtime.InteropServices;
 //using System.Diagnostics;
 
 namespace UnityVolumeRendering
@@ -170,10 +169,7 @@ namespace UnityVolumeRendering
                 dataset.scaleZ = Mathf.Abs(files[files.Count - 1].location - files[0].location);
             }
 
-            /*Debug.Log("DownScale");
-            for(int i = 0; i < 1; i++) {
-                dataset.DownScaleData();
-            }*/
+            dataset.FixDimensions();
 
             return dataset;
         }

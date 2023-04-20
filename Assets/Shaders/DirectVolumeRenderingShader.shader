@@ -4,6 +4,7 @@
     {
         _DataTex ("Data Texture (Generated)", 3D) = "" {}
         _GradientTex("Gradient Texture (Generated)", 3D) = "" {}
+        _NoiseTex("Noise Texture (Generated)", 2D) = "white" {}
         _TFTex("Transfer Function Texture (Generated)", 2D) = "" {}
         _MinVal("Min val", Range(0.0, 1.0)) = 0.0
         _MaxVal("Max val", Range(0.0, 1.0)) = 1.0
@@ -57,6 +58,7 @@
 
             sampler3D _DataTex;
             sampler3D _GradientTex;
+            sampler2D _NoiseTex;
             sampler2D _TFTex;
 
             float _MinVal;
@@ -158,7 +160,7 @@
                 rayDir = normalize(rayDir);
 
                 // Create a small random offset in order to remove artifacts
-                rayStartPos = rayStartPos + (2.0f * rayDir / NUM_STEPS);
+                rayStartPos = rayStartPos + (2.0f * rayDir / NUM_STEPS) * tex2D(_NoiseTex, float2(i.uv.x, i.uv.y)).r;
 
                 float4 col = float4(0.0f, 0.0f, 0.0f, 0.0f);
                 uint iDepth = 0;
@@ -273,7 +275,7 @@
                 rayDir = -rayDir;
 
                 // Create a small random offset in order to remove artifacts
-                rayStartPos = rayStartPos + (2.0f * rayDir / NUM_STEPS);
+                rayStartPos = rayStartPos + (2.0f * rayDir / NUM_STEPS) * tex2D(_NoiseTex, float2(i.uv.x, i.uv.y)).r;
 
                 float4 col = float4(0,0,0,0);
                 for (uint iStep = 0; iStep < NUM_STEPS; iStep++)
